@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8-way Spawning Buttons POC</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* All CSS remains the same for consistent styling */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* bg-gray-900 */
+        }
+
+        body.stack-selection-active {
+            cursor: pointer;
+        }
+        
+        body.stack-selection-active .spawner:not(.is-in-selection) {
+            pointer-events: none;
+        }
+
+        @keyframes neon-glow {
+            from {
+                box-shadow: 0 0 5px rgba(255, 255, 255, 0.8), 0 0 10px rgba(255, 255, 255, 0.6), 0 0 15px rgba(255, 255, 255, 0.4);
+            }
+            to {
+                box-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 20px rgba(255, 255, 255, 0.7), 0 0 30px rgba(255, 255, 255, 0.5);
+            }
+        }
+
+        @keyframes neon-glow-red {
+            from {
+                box-shadow: 0 0 5px rgba(239, 68, 68, 0.8), 0 0 10px rgba(239, 68, 68, 0.6), 0 0 15px rgba(239, 68, 68, 0.4);
+            }
+            to {
+                box-shadow: 0 0 10px rgba(239, 68, 68, 0.9), 0 0 20px rgba(239, 68, 68, 0.7), 0 0 30px rgba(239, 68, 68, 0.5);
+            }
+        }
+
+        .spawner {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border: 2px solid #4b5563; /* border-gray-600 */
+            border-radius: 0.75rem; /* rounded-xl */
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+            pointer-events: none; 
+            cursor: default;
+        }
+
+        .spawner.is-in-selection {
+             pointer-events: auto;
+        }
+
+        /* The red glow is now controlled by a class, not hover, for JS control */
+        .spawner.is-in-selection.is-focused {
+            border-color: #ef4444; /* red-500 */
+            animation: neon-glow-red 0.8s infinite alternate;
+        }
+
+        .spawner.is-in-selection .spawner-btn,
+        .spawner.is-in-selection .spawner-center {
+            pointer-events: none;
+        }
+
+        .spawner:hover {
+            transform: scale(1.05);
+            border-color: #fff;
+            animation: neon-glow 0.8s infinite alternate;
+        }
+        
+        .spawner-name {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .spawner-name-top {
+            top: -28px;
+            background-color: #1f2937; /* bg-gray-800 */
+            color: #d1d5db; /* text-gray-300 */
+            padding: 2px 10px;
+            border-radius: 0.375rem; /* rounded-md */
+            font-size: 0.75rem; /* text-sm */
+            font-weight: 500;
+            border: 1px solid #4b5563; /* border-gray-600 */
+        }
+
+        .spawner-name-bottom {
+            bottom: -32px;
+            font-size: 1.125rem; /* text-xl */
+            font-weight: 500;
+            color: #9ca3af; /* text-gray-400 */
+        }
+        
+        .spawner-center, .spawner-btn {
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            border-radius: 0.5rem;
+            transition: background-color 0.15s ease-in-out;
+            pointer-events: auto;
+        }
+        
+        .spawner-center { grid-area: 2 / 2 / 3 / 3; }
+        .spawner-center:hover, .spawner-btn:hover { background-color: rgba(255, 255, 255, 0.1); }
+
+        .spawner-btn[data-direction="nw"] { grid-area: 1 / 1 / 2 / 2; }
+        .spawner-btn[data-direction="n"]  { grid-area: 1 / 2 / 2 / 3; }
+        .spawner-btn[data-direction="ne"] { grid-area: 1 / 3 / 2 / 4; }
+        .spawner-btn[data-direction="w"]  { grid-area: 2 / 1 / 3 / 2; }
+        .spawner-btn[data-direction="e"]  { grid-area: 2 / 3 / 3 / 4; }
+        .spawner-btn[data-direction="sw"] { grid-area: 3 / 1 / 4 / 2; }
+        .spawner-btn[data-direction="s"]  { grid-area: 3 / 2 / 4 / 3; }
+        .spawner-btn[data-direction="se"] { grid-area: 3 / 3 / 4 / 4; }
+
+        #top-bar {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            right: 1rem;
+            z-index: 6000;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none; /* Pass clicks through the bar itself */
+        }
+
+        #log-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(4px);
+            color: #d1d5db;
+            border: 1px solid #4b5563;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow: auto;
+            z-index: 5000;
+            transform: translateY(-110%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: auto;
+        }
+        
+        #log-container.visible {
+            transform: translateY(0);
+        }
+
+        #log-content {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 9pt;
+            white-space: pre;
+            line-height: 1.5;
+        }
+        
+        #controls {
+            display: flex;
+            gap: 1rem;
+            pointer-events: auto;
+        }
+        
+        .control-panel {
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(4px);
+            color: #d1d5db;
+            border: 1px solid #4b5563;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .control-panel button, #toggle-log-btn {
+            background-color: #374151;
+            color: #e5e7eb;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            pointer-events: auto;
+        }
+        .control-panel button:hover, #toggle-log-btn:hover { background-color: #4b5563; }
+        .control-panel label { display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; }
+
+        #simulated-cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(239, 68, 68, 0.7);
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: top 0.2s ease, left 0.2s ease;
+            z-index: 9999;
+            opacity: 0;
+        }
+
+        #simulated-cursor.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="overflow-hidden">
+
+    <div id="spawner-container"></div>
+    <div id="simulated-cursor"></div>
+
+    <div id="top-bar">
+        <div id="controls">
+            <div class="control-panel">
+                <div>
+                    <button id="walker-play-pause">▶ Walker</button>
+                    <div id="walker-speed" class="flex items-center gap-3 mt-1">
+                        <label><input type="radio" name="speed" value="300" checked> Default</label>
+                        <label><input type="radio" name="speed" value="150"> 10x</label>
+                        <label><input type="radio" name="speed" value="75"> 20x</label>
+                    </div>
+                </div>
+            </div>
+             <div class="control-panel">
+                <div>
+                    <button id="loop-test-runner">▶ Loop Test</button>
+                    <div id="loop-counter" class="text-sm mt-1">Loops: 0</div>
+                </div>
+            </div>
+        </div>
+        <button id="toggle-log-btn">State Log</button>
+    </div>
+
+    <div id="log-container">
+        <pre id="log-content">Initializing...</pre>
+    </div>
+
+    <div class="absolute bottom-4 right-4 text-gray-400 text-sm p-2 bg-gray-900/50 rounded-lg">
+        Click the center of a tile to reorder its stack.
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('spawner-container');
+            const logContainer = document.getElementById('log-container');
+            const logContent = document.getElementById('log-content');
+            const simulatedCursor = document.getElementById('simulated-cursor');
+            const toggleLogBtn = document.getElementById('toggle-log-btn');
+            
+            const SPAWNER_SIZE = 100;
+            const SPAWNER_GAP = 32;
+            const gridOffsetX = (window.innerWidth / 2) - (SPAWNER_SIZE / 2);
+            const gridOffsetY = (window.innerHeight / 2) - (SPAWNER_SIZE / 2);
+            
+            const fibonacci = [1, 2, 3, 5, 8, 13];
+            const directionMap = {
+                'n': [0, -1], 'ne': [1, -1], 'e': [1, 0], 'se': [1, 1],
+                's': [0, 1], 'sw': [-1, 1], 'w': [-1, 0], 'nw': [-1, -1],
+            };
+
+            // --- Simplified State Model ---
+            let appState = {
+                mode: 'idle', // 'idle' or 'selecting'
+                activeSelectorKey: null, // "gridX,gridY" string
+                spawnerStacks: new Map() // Key: "gridX,gridY", Value: [tileObject, ...]
+            };
+            let logHistory = [];
+
+            // --- Core Actions ---
+            function spawnTile(fromGridX, fromGridY, direction) {
+                const [dx, dy] = directionMap[direction];
+                const gridX = fromGridX + dx;
+                const gridY = fromGridY + dy;
+                const key = `${gridX},${gridY}`;
+
+                const stack = appState.spawnerStacks.get(key) ?? [];
+                const z = stack.length;
+                const fromStack = appState.spawnerStacks.get(`${fromGridX},${fromGridY}`);
+                const topZ = fromStack ? fromStack[fromStack.length-1].z : -1;
+
+                const newTile = {
+                    gridX, gridY, z, id: `${key},${z}`,
+                    tilt: `rotate(${(Math.random() > 0.5 ? 1 : -1) * fibonacci[Math.floor(Math.random() * fibonacci.length)] * 0.5}deg)`
+                };
+
+                stack.push(newTile);
+                appState.spawnerStacks.set(key, stack);
+                logAction(`<Spawn from (${fromGridX},${fromGridY},${topZ}) to ${direction}>`);
+                render();
+            }
+
+            function openSelector(gridX, gridY) {
+                appState.mode = 'selecting';
+                appState.activeSelectorKey = `${gridX},${gridY}`;
+                logAction(`<Opened radial for (${gridX}, ${gridY})>`);
+                render();
+            }
+
+            function promoteTile(gridX, gridY, selectedZ) {
+                const key = `${gridX},${gridY}`;
+                const stack = appState.spawnerStacks.get(key);
+                if (!stack) return;
+
+                const selectedIndex = stack.findIndex(tile => tile.z === selectedZ);
+                if (selectedIndex > -1) {
+                    const [promotedTile] = stack.splice(selectedIndex, 1);
+                    stack.push(promotedTile);
+                }
+                
+                appState.mode = 'idle';
+                appState.activeSelectorKey = null;
+                logAction(`<Selected Z:${selectedZ} at (${gridX},${gridY}) in radial>`);
+                render();
+            }
+
+            function closeSelector() {
+                appState.mode = 'idle';
+                appState.activeSelectorKey = null;
+                render();
+            }
+
+            // --- Render Function (Single Source of Truth for UI) ---
+            function render() {
+                container.innerHTML = '';
+                document.body.classList.toggle('stack-selection-active', appState.mode === 'selecting');
+
+                const allKeys = Array.from(appState.spawnerStacks.keys());
+                const inactiveKeys = allKeys.filter(key => key !== appState.activeSelectorKey);
+                
+                inactiveKeys.forEach(key => {
+                    const stack = appState.spawnerStacks.get(key);
+                    stack.forEach((tileData, index) => {
+                        const isTop = index === stack.length - 1;
+                        const spawner = createSpawnerElement(tileData, { isSelecting: false, isTop });
+                        container.appendChild(spawner);
+                    });
+                });
+
+                if (appState.mode === 'selecting' && appState.activeSelectorKey) {
+                    const activeStack = appState.spawnerStacks.get(appState.activeSelectorKey);
+                    if (activeStack) {
+                        const originTile = activeStack[0];
+                        const pixelX = originTile.gridX * (SPAWNER_SIZE + SPAWNER_GAP) + gridOffsetX;
+                        const pixelY = originTile.gridY * (SPAWNER_SIZE + SPAWNER_GAP) + gridOffsetY;
+                        
+                        const edgeMarginX = window.innerWidth * 0.3;
+                        const edgeMarginY = window.innerHeight * 0.3;
+
+                        let startAngle = -Math.PI / 2;
+                        let totalAngle = 2 * Math.PI;
+
+                        if (pixelY < edgeMarginY) { startAngle = 0; totalAngle = Math.PI; } 
+                        else if (pixelY > window.innerHeight - edgeMarginY) { startAngle = -Math.PI; totalAngle = Math.PI; } 
+                        else if (pixelX < edgeMarginX) { startAngle = -Math.PI / 2; totalAngle = Math.PI; } 
+                        else if (pixelX > window.innerWidth - edgeMarginX) { startAngle = Math.PI / 2; totalAngle = Math.PI; }
+
+                        activeStack.forEach(tileData => {
+                            const spawner = createSpawnerElement(tileData, { 
+                                isSelecting: true, 
+                                stackLength: activeStack.length, 
+                                startAngle, 
+                                totalAngle 
+                            });
+                            container.appendChild(spawner);
+                        });
+                    }
+                }
+                
+                updateLogAndDiagram();
+            }
+
+            function createSpawnerElement(tileData, config) {
+                const { gridX, gridY, z, id, tilt } = tileData;
+                const { isSelecting, isTop, stackLength, startAngle, totalAngle } = config;
+
+                const pixelX = gridX * (SPAWNER_SIZE + SPAWNER_GAP) + gridOffsetX;
+                const pixelY = gridY * (SPAWNER_SIZE + SPAWNER_GAP) + gridOffsetY;
+                
+                const spawner = document.createElement('div');
+                spawner.className = 'spawner';
+                spawner.style.left = `${pixelX}px`;
+                spawner.style.top = `${pixelY}px`;
+                spawner.dataset.id = id;
+                spawner.dataset.gridX = gridX;
+                spawner.dataset.gridY = gridY;
+                spawner.dataset.z = z;
+
+                const hue = (z * 37) % 360;
+                spawner.style.backgroundColor = `hsl(${hue}, 60%, 25%)`;
+                spawner.style.borderColor = `hsl(${hue}, 50%, 20%)`;
+
+                if (isSelecting) {
+                    spawner.classList.add('is-in-selection');
+                    const angle = startAngle + (z / stackLength) * totalAngle;
+                    const radius = SPAWNER_SIZE * 0.75; 
+                    spawner.style.transform = `translate(${radius * Math.cos(angle)}px, ${radius * Math.sin(angle)}px) scale(0.5) ${tilt}`;
+                    
+                    const nameBar = document.createElement('div');
+                    nameBar.className = 'spawner-name spawner-name-top';
+                    nameBar.textContent = `Z: ${z}`;
+                    nameBar.style.transform = 'translateX(-50%) scale(2)';
+                    nameBar.style.top = '-40px';
+                    spawner.appendChild(nameBar);
+
+                } else {
+                    spawner.style.transform = tilt;
+                    if (isTop) {
+                        const topLabel = document.createElement('div');
+                        topLabel.className = 'spawner-name spawner-name-top';
+                        topLabel.textContent = `(${gridX}, ${gridY})`;
+                        spawner.appendChild(topLabel);
+
+                        const bottomLabel = document.createElement('div');
+                        bottomLabel.className = 'spawner-name spawner-name-bottom';
+                        bottomLabel.textContent = `${z}`;
+                        spawner.appendChild(bottomLabel);
+                    }
+                }
+
+                Object.keys(directionMap).forEach(dir => spawner.insertAdjacentHTML('beforeend', `<button class="spawner-btn" data-direction="${dir}"></button>`));
+                spawner.insertAdjacentHTML('beforeend', `<button class="spawner-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-gray-400 mx-auto pointer-events-none"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg></button>`);
+
+                return spawner;
+            }
+            
+            // --- Event Handling ---
+            container.addEventListener('click', (event) => {
+                const target = event.target;
+                const spawner = target.closest('.spawner');
+
+                if (appState.mode === 'selecting') {
+                    if (spawner && spawner.classList.contains('is-in-selection')) {
+                        const gridX = parseInt(spawner.dataset.gridX);
+                        const gridY = parseInt(spawner.dataset.gridY);
+                        const selectedZ = parseInt(spawner.dataset.z);
+                        const selectedId = spawner.dataset.id;
+                        
+                        promoteTile(gridX, gridY, selectedZ);
+                        
+                        setTimeout(() => {
+                            checkStackTop(gridX, gridY, selectedId);
+                        }, 350);
+
+                    } else {
+                        closeSelector();
+                    }
+                    return;
+                }
+                
+                if (!spawner) return;
+
+                if (target.classList.contains('spawner-btn')) {
+                    spawnTile(parseInt(spawner.dataset.gridX), parseInt(spawner.dataset.gridY), target.dataset.direction);
+                } else if (target.classList.contains('spawner-center')) {
+                    openSelector(parseInt(spawner.dataset.gridX), parseInt(spawner.dataset.gridY));
+                }
+            });
+            
+            // --- Zoom Effect Handling ---
+            container.addEventListener('mouseover', (event) => {
+                const hoveredEl = event.target.closest('.spawner.is-in-selection');
+                if (!hoveredEl) return;
+                
+                const key = `${hoveredEl.dataset.gridX},${hoveredEl.dataset.gridY}`;
+                const stackData = appState.spawnerStacks.get(key);
+                if (!stackData) return;
+                const stackElements = container.querySelectorAll(`.spawner[data-grid-x="${hoveredEl.dataset.gridX}"][data-grid-y="${hoveredEl.dataset.gridY}"]`);
+                
+                const hoveredZ = parseInt(hoveredEl.dataset.z);
+                const hoveredIndex = stackData.findIndex(t => t.z === hoveredZ);
+
+                stackElements.forEach(el => {
+                    const elZ = parseInt(el.dataset.z, 10);
+                    const elIndex = stackData.findIndex(t => t.z === elZ);
+                    
+                    const distance = Math.abs(hoveredIndex - elIndex);
+                    const scale = Math.max(0.35, 0.65 * Math.pow(0.7, distance));
+                    
+                    el.style.transform = el.style.transform.replace(/scale\([0-9.]+\)/, `scale(${scale})`);
+                    el.classList.toggle('is-focused', el === hoveredEl);
+                });
+            });
+
+            container.addEventListener('mouseout', (event) => {
+                 const hoveredEl = event.target.closest('.spawner.is-in-selection');
+                 if (!hoveredEl) return;
+                 const stackElements = container.querySelectorAll(`.spawner[data-grid-x="${hoveredEl.dataset.gridX}"][data-grid-y="${hoveredEl.dataset.gridY}"]`);
+                 stackElements.forEach(el => {
+                    el.style.transform = el.style.transform.replace(/scale\([0-9.]+\)/, `scale(0.5)`);
+                    el.classList.remove('is-focused');
+                 });
+            });
+
+
+            // --- Logging & Diagram ---
+            function logAction(message) {
+                const timestamp = performance.now().toFixed(1);
+                logHistory.unshift({ timestamp, message });
+                if (logHistory.length > 10) logHistory.pop();
+            }
+
+            function updateLogAndDiagram() {
+                let minX = 0, maxX = 0, minY = 0, maxY = 0;
+                const coords = Array.from(appState.spawnerStacks.values()).filter(s => s.length > 0).map(s => ({gridX: s[0].gridX, gridY: s[0].gridY}));
+                if(coords.length > 0) {
+                    minX = Math.min(...coords.map(c => c.gridX));
+                    maxX = Math.max(...coords.map(c => c.gridX));
+                    minY = Math.min(...coords.map(c => c.gridY));
+                    maxY = Math.max(...coords.map(c => c.gridY));
+                }
+
+                let diagram = 'State Diagram:\n';
+                for (let y = minY; y <= maxY; y++) {
+                    let row = '';
+                    for (let x = minX; x <= maxX; x++) {
+                        const stack = appState.spawnerStacks.get(`${x},${y}`);
+                        if (stack && stack.length > 0) {
+                            const topTile = stack[stack.length - 1];
+                            const topZ = topTile.z; 
+                            row += `[${stack.length}:${topZ}]`.padEnd(6);
+                        } else {
+                            row += '[    ]'.padEnd(6);
+                        }
+                    }
+                    diagram += row + '\n';
+                }
+                
+                const logText = 'Actions:\n' + logHistory.map(entry => `[${entry.timestamp.toString().padStart(8, ' ')}ms] ${entry.message}`).join('\n');
+                logContent.textContent = diagram + '\n' + logText;
+            }
+
+            // --- Automated Testers (Updated) ---
+            let walkerIntervalId = null, loopTestIntervalId = null;
+            
+            function stopAndAlert(message) {
+                if (walkerIntervalId) clearInterval(walkerIntervalId);
+                if (loopTestIntervalId) clearInterval(loopTestIntervalId);
+                isWalkerRunning = false; isLoopTestRunning = false;
+                document.getElementById('walker-play-pause').textContent = '▶ Walker';
+                document.getElementById('loop-test-runner').textContent = '▶ Loop Test';
+
+                document.body.style.backgroundColor = '#7f1d1d';
+                console.error("--- CONSISTENCY CHECK FAILED ---");
+                console.error(message);
+                console.error("--- END OF REPORT ---");
+                throw new Error(message);
+            }
+
+            function checkStackTop(gridX, gridY, expectedTopId) {
+                const stackElements = document.querySelectorAll(`.spawner[data-grid-x="${gridX}"][data-grid-y="${gridY}"]`);
+                if (stackElements.length === 0) return;
+
+                const topElement = stackElements[stackElements.length - 1];
+
+                if (topElement.dataset.id !== expectedTopId) {
+                    stopAndAlert(`Stack top inconsistency at (${gridX},${gridY}). Expected card with ID '${expectedTopId}' to be on top, but found '${topElement.dataset.id}'.`);
+                }
+            }
+            
+            // --- Simulated Mouse Logic ---
+            function simulateMouseEvent(target, type) {
+                if (!target) return;
+                const rect = target.getBoundingClientRect();
+                simulatedCursor.style.left = `${rect.left + rect.width / 2}px`;
+                simulatedCursor.style.top = `${rect.top + rect.height / 2}px`;
+
+                const event = new MouseEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                target.dispatchEvent(event);
+            }
+
+            document.getElementById('walker-play-pause').addEventListener('click', toggleWalker);
+            document.querySelectorAll('input[name="speed"]').forEach(r => r.addEventListener('change', (e) => changeWalkerSpeed(e.target.value)));
+            document.getElementById('loop-test-runner').addEventListener('click', toggleLoopTestRunner);
+            toggleLogBtn.addEventListener('click', () => logContainer.classList.toggle('visible'));
+
+            let isWalkerRunning = false, isLoopTestRunning = false;
+            let walkerSpeed = 300, walkerShouldReturnToCenter = false, loopCount = 0;
+
+            function walkerStep() {
+                if (appState.mode === 'selecting') {
+                    const selection = Array.from(container.querySelectorAll('.spawner.is-in-selection'));
+                    if (selection.length > 0) {
+                        const randomCard = selection[Math.floor(Math.random() * selection.length)];
+                        simulateMouseEvent(randomCard, 'mouseover');
+                        setTimeout(() => simulateMouseEvent(randomCard, 'click'), walkerSpeed / 2);
+                    }
+                    walkerShouldReturnToCenter = true;
+                    return;
+                }
+
+                const allSpawners = Array.from(document.querySelectorAll('.spawner:not(.is-in-selection)'));
+                if (allSpawners.length === 0) return;
+
+                let targetEl;
+                if (walkerShouldReturnToCenter) {
+                    const centerStackElements = document.querySelectorAll(`.spawner[data-grid-x="0"][data-grid-y="0"]`);
+                    if (centerStackElements.length > 0) {
+                        targetEl = centerStackElements[centerStackElements.length - 1];
+                    }
+                } else {
+                    targetEl = allSpawners[Math.floor(Math.random() * allSpawners.length)];
+                }
+                walkerShouldReturnToCenter = !walkerShouldReturnToCenter;
+
+                if (!targetEl) return;
+                
+                if (appState.spawnerStacks.get(`${targetEl.dataset.gridX},${targetEl.dataset.gridY}`).length > 1 && Math.random() < 0.4) {
+                    const centerBtn = targetEl.querySelector('.spawner-center');
+                    simulateMouseEvent(centerBtn, 'click');
+                } else {
+                    const directions = Object.keys(directionMap).sort(() => 0.5 - Math.random());
+                    for (const dir of directions) {
+                         const [dx, dy] = directionMap[dir];
+                        const newPixelX = (parseInt(targetEl.dataset.gridX) + dx) * (SPAWNER_SIZE + SPAWNER_GAP) + gridOffsetX;
+                        const newPixelY = (parseInt(targetEl.dataset.gridY) + dy) * (SPAWNER_SIZE + SPAWNER_GAP) + gridOffsetY;
+                        
+                        if (newPixelX > 0 && newPixelX < window.innerWidth - SPAWNER_SIZE &&
+                            newPixelY > 0 && newPixelY < window.innerHeight - SPAWNER_SIZE) {
+                            const spawnBtn = targetEl.querySelector(`.spawner-btn[data-direction="${dir}"]`);
+                            simulateMouseEvent(spawnBtn, 'click');
+                            return;
+                        }
+                    }
+                }
+            }
+
+            function loopTestStep() {
+                if (appState.mode === 'selecting') {
+                    const selection = Array.from(container.querySelectorAll('.spawner.is-in-selection'));
+                    if (selection.length > 0) {
+                        const randomCard = selection[Math.floor(Math.random() * selection.length)];
+                        simulateMouseEvent(randomCard, 'mouseover');
+                        setTimeout(() => {
+                            simulateMouseEvent(randomCard, 'click');
+                            document.getElementById('loop-counter').textContent = `Loops: ${++loopCount}`;
+                        }, 400);
+                    }
+                } else {
+                    const eligible = Array.from(appState.spawnerStacks.entries()).filter(([k,s]) => s.length > 1);
+                    if (eligible.length > 0) {
+                        const [key, stack] = eligible[Math.floor(Math.random() * eligible.length)];
+                        const topEl = document.querySelector(`.spawner[data-id="${stack[stack.length-1].id}"]`);
+                        if(topEl) simulateMouseEvent(topEl.querySelector('.spawner-center'), 'click');
+                    }
+                }
+            }
+
+            function toggleWalker() {
+                isWalkerRunning = !isWalkerRunning;
+                simulatedCursor.classList.toggle('visible', isWalkerRunning || isLoopTestRunning);
+                document.getElementById('walker-play-pause').textContent = isWalkerRunning ? '❚❚ Walker' : '▶ Walker';
+                if(isWalkerRunning) { if(isLoopTestRunning) toggleLoopTestRunner(); walkerIntervalId = setInterval(walkerStep, walkerSpeed); } 
+                else { clearInterval(walkerIntervalId); }
+            }
+            function toggleLoopTestRunner() {
+                isLoopTestRunning = !isLoopTestRunning;
+                simulatedCursor.classList.toggle('visible', isWalkerRunning || isLoopTestRunning);
+                document.getElementById('loop-test-runner').textContent = isLoopTestRunning ? '❚❚ Loop Test' : '▶ Loop Test';
+                if(isLoopTestRunning) { if(isWalkerRunning) toggleWalker(); loopTestIntervalId = setInterval(loopTestStep, 800); }
+                else { clearInterval(loopTestIntervalId); }
+            }
+            function changeWalkerSpeed(newSpeed) {
+                walkerSpeed = parseInt(newSpeed, 10);
+                if(isWalkerRunning) { clearInterval(walkerIntervalId); walkerIntervalId = setInterval(walkerStep, walkerSpeed); }
+            }
+
+            // --- Initial Setup ---
+            for (let i = 0; i < 4; i++) {
+                const key = '0,0';
+                const stack = appState.spawnerStacks.get(key) ?? [];
+                stack.push({gridX: 0, gridY: 0, z: i, id: `${key},${i}`, tilt: `rotate(0deg)`});
+                appState.spawnerStacks.set(key, stack);
+            }
+            render();
+            logContainer.classList.add('visible'); // Start with log open
+        });
+    </script>
+</body>
+</html>
